@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -41,6 +43,12 @@ class ApplicationController extends Controller
             'is_active' => true,
         ]);
 
+        AuditLogger::log(
+            'application.created',
+            Auth::user()->name . " mendaftarkan aplikasi baru \"{$application->name}\".",
+            $application
+        );
+
         // Shown exactly once - never persisted/logged in plaintext anywhere else.
         return redirect()->route('admin.applications.index')
             ->with('new_credentials', $credentials)
@@ -51,15 +59,27 @@ class ApplicationController extends Controller
     {
         $application->update(['is_active' => ! $application->is_active]);
 
-        $status = $application->is_active ? 'diaktifkan kembali' : 'dinonaktifkan';
+        $statusLabel = $application->is_active ? 'diaktifkan kembali' : 'dinonaktifkan';
 
-        return back()->with('status', "Aplikasi \"{$application->name}\" {$status}. Data rating tetap tersimpan.");
+        AuditLogger::log(
+            $application->is_active ? 'application.activated' : 'application.deactivated',
+            Auth::user()->name . " {$statusLabel} aplikasi \"{$application->name}\".",
+            $application
+        );
+
+        return back()->with('status', "Aplikasi \"{$application->name}\" {$statusLabel}. Data rating tetap tersimpan.");
     }
 
     public function regenerateCredentials(Application $application): RedirectResponse
     {
         $credentials = Application::generateCredentials();
         $application->update($credentials);
+
+        AuditLogger::log(
+            'application.credentials_regenerated',
+            Auth::user()->name . " regenerate credentials untuk \"{$application->name}\".",
+            $application
+        );
 
         return back()
             ->with('new_credentials', $credentials)

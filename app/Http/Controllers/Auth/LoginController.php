@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AuditLogger;
 use App\Services\Totp;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,14 @@ class LoginController extends Controller
         $user = User::where('email', $credentials['email'])->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+            // Log with actorOverride = null (no authenticated actor yet), but the
+            // description still records which email was attempted for monitoring
+            // brute-force / credential-stuffing patterns.
+            AuditLogger::log(
+                'auth.login_failed',
+                "Percobaan login gagal untuk email: {$credentials['email']}."
+            );
+
             return back()
                 ->withErrors(['email' => 'Email atau password salah.'])
                 ->onlyInput('email');
@@ -45,6 +54,8 @@ class LoginController extends Controller
 
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
+
+        AuditLogger::log('auth.login_success', "{$user->name} login berhasil (tanpa 2FA).", $user, $user);
 
         return redirect()->intended(route('admin.dashboard'));
     }
@@ -72,6 +83,7 @@ class LoginController extends Controller
         $code = $request->input('code');
 
         $valid = Totp::verify($user->two_factor_secret, $code);
+        $usedRecoveryCode = false;
 
         // Fallback: allow a recovery code, consume it so it can't be reused
         if (! $valid && $user->two_factor_recovery_codes) {
@@ -80,6 +92,7 @@ class LoginController extends Controller
 
             if (in_array($normalizedInput, $codes, true)) {
                 $valid = true;
+                $usedRecoveryCode = true;
                 $user->update([
                     'two_factor_recovery_codes' => array_values(array_diff($codes, [$normalizedInput])),
                 ]);
@@ -87,6 +100,13 @@ class LoginController extends Controller
         }
 
         if (! $valid) {
+            AuditLogger::log(
+                'auth.2fa_failed',
+                "{$user->name} memasukkan kode 2FA yang salah saat login.",
+                $user,
+                $user
+            );
+
             return back()->withErrors(['code' => 'Kode tidak valid atau sudah kedaluwarsa.']);
         }
 
@@ -96,11 +116,24 @@ class LoginController extends Controller
         Auth::login($user, $remember);
         $request->session()->regenerate();
 
+        AuditLogger::log(
+            'auth.login_success',
+            "{$user->name} login berhasil" . ($usedRecoveryCode ? ' (pakai recovery code).' : ' (2FA).'),
+            $user,
+            $user
+        );
+
         return redirect()->intended(route('admin.dashboard'));
     }
 
     public function logout(Request $request): RedirectResponse
     {
+        $user = Auth::user();
+
+        if ($user) {
+            AuditLogger::log('auth.logout', "{$user->name} logout.", $user, $user);
+        }
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

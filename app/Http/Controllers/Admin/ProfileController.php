@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\AuditLogger;
 use App\Services\Totp;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,6 +36,8 @@ class ProfileController extends Controller
         $user->update([
             'password' => Hash::make($request->input('password')),
         ]);
+
+        AuditLogger::log('user.password_changed_self', "{$user->name} mengganti password sendiri.", $user, $user);
 
         // Force logout after password change - standard security practice.
         // If the password was changed because of a suspected compromise,
@@ -89,6 +92,8 @@ class ProfileController extends Controller
             'two_factor_recovery_codes' => $recoveryCodes,
         ]);
 
+        AuditLogger::log('auth.2fa_enabled', Auth::user()->name . ' mengaktifkan 2FA.', Auth::user(), Auth::user());
+
         $request->session()->forget('2fa_setup_secret');
 
         return redirect()->route('admin.profile.edit')
@@ -109,6 +114,8 @@ class ProfileController extends Controller
             'two_factor_enabled' => false,
             'two_factor_recovery_codes' => null,
         ]);
+
+        AuditLogger::log('auth.2fa_disabled', Auth::user()->name . ' menonaktifkan 2FA.', Auth::user(), Auth::user());
 
         return back()->with('status', '2FA dinonaktifkan.');
     }

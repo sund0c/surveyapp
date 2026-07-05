@@ -50,6 +50,14 @@
                    class="block px-3 py-2 rounded {{ request()->routeIs('admin.ratings.*') ? 'bg-gray-800 text-white' : 'hover:bg-gray-800' }}">
                     Rating & Saran
                 </a>
+                <a href="{{ route('admin.users.index') }}"
+                   class="block px-3 py-2 rounded {{ request()->routeIs('admin.users.*') ? 'bg-gray-800 text-white' : 'hover:bg-gray-800' }}">
+                    Manajemen User
+                </a>
+                <a href="{{ route('admin.audit.index') }}"
+                   class="block px-3 py-2 rounded {{ request()->routeIs('admin.audit.*') ? 'bg-gray-800 text-white' : 'hover:bg-gray-800' }}">
+                    Audit Trail
+                </a>
             </nav>
 
             <div class="p-3 border-t border-gray-800 text-sm">
